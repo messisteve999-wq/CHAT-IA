@@ -4,237 +4,180 @@ import android.app.Activity
 import android.content.ClipData
 import android.content.ClipboardManager
 import android.content.Context
+import android.content.Intent
+import android.net.Uri
 import android.os.Bundle
+import android.provider.Settings
 import android.view.Gravity
 import android.view.ViewGroup
-import android.widget.AdapterView
-import android.widget.ArrayAdapter
 import android.widget.Button
+import android.widget.CheckBox
 import android.widget.EditText
 import android.widget.LinearLayout
 import android.widget.ScrollView
-import android.widget.Spinner
 import android.widget.TextView
 import android.widget.Toast
 import java.util.concurrent.Executors
 
 class MainActivity : Activity() {
-
     private val executor = Executors.newSingleThreadExecutor()
-
-    private val themes = arrayOf(
-        "Faire connaissance",
-        "Drague amicale",
-        "Drague romantique",
-        "Vie quotidienne",
-        "Humour et taquinerie",
-        "Discussion profonde",
-        "Relancer une conversation"
-    )
-
     private lateinit var apiKey: EditText
-    private lateinit var themeSpinner: Spinner
-    private lateinit var countSpinner: Spinner
-    private lateinit var results: TextView
-    private lateinit var generateButton: Button
+    private lateinit var autoReply: CheckBox
+    private lateinit var latest: TextView
+    private lateinit var suggestion: EditText
+    private lateinit var status: TextView
 
-    private fun dp(value: Int): Int =
-        (value * resources.displayMetrics.density).toInt()
+    private fun dp(value: Int) = (value * resources.displayMetrics.density).toInt()
+    private fun toast(message: String) = Toast.makeText(this, message, Toast.LENGTH_LONG).show()
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-
-        val preferences = getSharedPreferences("chatia", MODE_PRIVATE)
-
+        val prefs = getSharedPreferences("chatia", MODE_PRIVATE)
         val root = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
-            setPadding(dp(16), dp(16), dp(16), dp(16))
+            setPadding(dp(16), dp(12), dp(16), dp(16))
             setBackgroundColor(0xFFF7F3FF.toInt())
         }
-
         val scroll = ScrollView(this)
-        val content = LinearLayout(this).apply {
-            orientation = LinearLayout.VERTICAL
-        }
+        val content = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
         scroll.addView(content)
-
         content.addView(TextView(this).apply {
-            text = "CHAT-IA"
+            text = "Steve-20"
             textSize = 30f
             gravity = Gravity.CENTER
             setTextColor(0xFF673AB7.toInt())
-            setPadding(0, dp(8), 0, dp(12))
+            setPadding(0, dp(10), 0, dp(6))
         })
-
         content.addView(TextView(this).apply {
-            text = "Des idées naturelles pour discuter, faire connaissance et relancer une conversation."
-            textSize = 16f
-            setPadding(0, dp(8), 0, dp(16))
+            text = "Assistant flottant pour WhatsApp et WhatsApp Business"
+            textSize = 15f
+            gravity = Gravity.CENTER
+            setPadding(0, 0, 0, dp(12))
         })
-
         apiKey = EditText(this).apply {
             hint = "Clé API Gemini"
             setSingleLine(true)
-            setText(preferences.getString("api_key", ""))
+            setText(prefs.getString("api_key", ""))
         }
         content.addView(apiKey)
-
+        content.addView(Button(this).apply {
+            text = "Enregistrer la clé Gemini"
+            setOnClickListener {
+                val key = apiKey.text.toString().trim()
+                if (key.isBlank()) toast("Entre ta clé API Gemini.") else {
+                    prefs.edit().putString("api_key", key).apply()
+                    toast("Clé enregistrée sur ce téléphone.")
+                }
+            }
+        })
+        autoReply = CheckBox(this).apply {
+            text = "Activer les réponses automatiques"
+            isChecked = prefs.getBoolean("automatic_reply", false)
+            setPadding(0, dp(8), 0, dp(8))
+            setOnCheckedChangeListener { _, checked ->
+                prefs.edit().putBoolean("automatic_reply", checked).apply()
+                toast(if (checked) "Mode automatique activé. Teste-le d'abord avec un contact de confiance." else "Mode validation manuelle activé.")
+            }
+        }
+        content.addView(autoReply)
+        content.addView(Button(this).apply {
+            text = "Autoriser les notifications WhatsApp"
+            setOnClickListener {
+                startActivity(Intent(Settings.ACTION_NOTIFICATION_LISTENER_SETTINGS))
+            }
+        })
+        content.addView(Button(this).apply {
+            text = "Autoriser la fenêtre flottante"
+            setOnClickListener {
+                if (Settings.canDrawOverlays(this@MainActivity)) toast("Autorisation déjà accordée.")
+                else startActivity(Intent(Settings.ACTION_MANAGE_OVERLAY_PERMISSION, Uri.parse("package:$packageName")))
+            }
+        })
+        content.addView(Button(this).apply {
+            text = "Afficher / masquer la bulle Steve-20"
+            setOnClickListener {
+                if (!Settings.canDrawOverlays(this@MainActivity)) {
+                    startActivity(Intent(Settings.ACTION_MANAGE_OVERLAY_PERMISSION, Uri.parse("package:$packageName")))
+                } else startService(Intent(this@MainActivity, FloatingChatService::class.java))
+            }
+        })
         content.addView(TextView(this).apply {
-            text = "Choisis un thème"
-            textSize = 16f
+            text = "Dernier message détecté"
+            textSize = 18f
+            setTextColor(0xFF673AB7.toInt())
             setPadding(0, dp(16), 0, dp(4))
         })
-
-        themeSpinner = Spinner(this)
-        themeSpinner.adapter = ArrayAdapter(
-            this,
-            android.R.layout.simple_spinner_dropdown_item,
-            themes
-        )
-        themeSpinner.setSelection(
-            preferences.getInt("theme_index", 0).coerceIn(themes.indices)
-        )
-        themeSpinner.onItemSelectedListener =
-            object : AdapterView.OnItemSelectedListener {
-                override fun onItemSelected(
-                    parent: AdapterView<*>?,
-                    view: android.view.View?,
-                    position: Int,
-                    id: Long
-                ) {
-                    preferences.edit()
-                        .putInt("theme_index", position)
-                        .apply()
-                }
-
-                override fun onNothingSelected(parent: AdapterView<*>?) {}
-            }
-        content.addView(themeSpinner)
-
-        content.addView(TextView(this).apply {
-            text = "Nombre de propositions"
-            textSize = 16f
-            setPadding(0, dp(16), 0, dp(4))
-        })
-
-        countSpinner = Spinner(this)
-        countSpinner.adapter = ArrayAdapter(
-            this,
-            android.R.layout.simple_spinner_dropdown_item,
-            arrayOf("10", "15", "20")
-        )
-        content.addView(countSpinner)
-
-        generateButton = Button(this).apply {
-            text = "Générer avec Gemini"
-            setOnClickListener { generate() }
-        }
-        content.addView(generateButton)
-
+        latest = TextView(this).apply { textSize = 15f; setTextColor(0xFF222222.toInt()); setPadding(0, dp(4), 0, dp(8)) }
+        content.addView(latest)
         content.addView(Button(this).apply {
-            text = "Ouvrir la bulle flottante"
-            setOnClickListener {
-                if (android.provider.Settings.canDrawOverlays(this@MainActivity)) {
-                    startService(
-                        android.content.Intent(
-                            this@MainActivity,
-                            FloatingChatService::class.java
-                        )
-                    )
-                } else {
-                    startActivity(
-                        android.content.Intent(
-                            android.provider.Settings.ACTION_MANAGE_OVERLAY_PERMISSION,
-                            android.net.Uri.parse("package:$packageName")
-                        )
-                    )
-                }
-            }
+            text = "Actualiser le dernier message"
+            setOnClickListener { refreshLatest() }
         })
-
-
         content.addView(Button(this).apply {
-            text = "Copier les propositions"
+            text = "Générer une suggestion avec Gemini"
+            setOnClickListener { generateSuggestion() }
+        })
+        suggestion = EditText(this).apply {
+            hint = "La suggestion apparaîtra ici. Tu peux la modifier."
+            minLines = 3
+            gravity = Gravity.TOP
+        }
+        content.addView(suggestion)
+        content.addView(Button(this).apply {
+            text = "Envoyer depuis la notification WhatsApp"
             setOnClickListener {
-                val text = results.text.toString()
-                if (text.isBlank() ||
-                    text == "Tes propositions apparaîtront ici." ||
-                    text == "Génération en cours…"
-                ) {
-                    toast("Génère d'abord des propositions.")
-                } else {
-                    val clipboard = getSystemService(
-                        Context.CLIPBOARD_SERVICE
-                    ) as ClipboardManager
-
-                    clipboard.setPrimaryClip(
-                        ClipData.newPlainText("CHAT-IA", text)
-                    )
-                    toast("Propositions copiées.")
+                val text = suggestion.text.toString().trim()
+                if (text.isBlank()) toast("Génère ou écris une réponse d'abord.")
+                else if (NotificationReplyListener.sendLatestReply(text)) toast("Réponse envoyée.")
+                else toast("Envoi direct indisponible pour cette notification. Ouvre WhatsApp et réponds manuellement.")
+            }
+        })
+        content.addView(Button(this).apply {
+            text = "Copier la réponse"
+            setOnClickListener {
+                val text = suggestion.text.toString().trim()
+                if (text.isBlank()) toast("Aucune réponse à copier.") else {
+                    (getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager)
+                        .setPrimaryClip(ClipData.newPlainText("Steve-20", text))
+                    toast("Réponse copiée.")
                 }
             }
         })
-
-        results = TextView(this).apply {
-            text = "Tes propositions apparaîtront ici."
-            textSize = 16f
-            setTextColor(0xFF222222.toInt())
-            setPadding(0, dp(18), 0, dp(18))
-            setTextIsSelectable(true)
-        }
-        content.addView(results)
-
-        root.addView(
-            scroll,
-            LinearLayout.LayoutParams(
-                ViewGroup.LayoutParams.MATCH_PARENT,
-                0,
-                1f
-            )
-        )
-
+        status = TextView(this).apply { textSize = 13f; setPadding(0, dp(12), 0, dp(8)) }
+        content.addView(status)
+        root.addView(scroll, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, 0, 1f))
         setContentView(root)
+        refreshLatest()
     }
 
-    private fun generate() {
-        val key = apiKey.text.toString().trim()
-
-        if (key.isBlank()) {
-            toast("Entre ta clé API Gemini.")
-            return
+    private fun refreshLatest() {
+        val prefs = getSharedPreferences("chatia", MODE_PRIVATE)
+        val sender = prefs.getString("last_sender", "") ?: ""
+        val message = prefs.getString("last_message", "") ?: ""
+        val app = when (prefs.getString("last_package", "")) {
+            "com.whatsapp" -> "WhatsApp"
+            "com.whatsapp.w4b" -> "WhatsApp Business"
+            else -> "Application inconnue"
         }
+        latest.text = if (message.isBlank()) "Aucun message détecté. Autorise l'accès aux notifications puis attends un nouveau message." else "$app · $sender\n$message"
+        status.text = "Accès notifications : ${if (NotificationReplyListener.notificationAccessEnabled(this)) "autorisé" else "à autoriser"}\nBulle : ${if (Settings.canDrawOverlays(this)) "autorisée" else "à autoriser"}"
+    }
 
-        getSharedPreferences("chatia", MODE_PRIVATE)
-            .edit()
-            .putString("api_key", key)
-            .apply()
-
-        val theme = themes[themeSpinner.selectedItemPosition]
-        val count = countSpinner.selectedItem.toString().toInt()
-
-        generateButton.isEnabled = false
-        results.text = "Génération en cours…"
-
+    private fun generateSuggestion() {
+        val prefs = getSharedPreferences("chatia", MODE_PRIVATE)
+        val key = apiKey.text.toString().trim().ifBlank { prefs.getString("api_key", "").orEmpty() }
+        val sender = prefs.getString("last_sender", "").orEmpty()
+        val message = prefs.getString("last_message", "").orEmpty()
+        if (key.isBlank()) { toast("Ajoute et enregistre ta clé Gemini."); return }
+        if (message.isBlank()) { toast("Aucun message détecté. Autorise les notifications et reçois un message."); return }
+        prefs.edit().putString("api_key", key).apply()
+        suggestion.setText("Génération en cours…")
         executor.execute {
-            val response = try {
-                GeminiClient.generate(key, theme, count)
-            } catch (e: Exception) {
-                "Erreur : ${e.message ?: "impossible de contacter Gemini."}"
-            }
-
-            runOnUiThread {
-                results.text = response
-                generateButton.isEnabled = true
-            }
+            val result = try { Steve20Gemini.reply(key, sender, message) } catch (e: Exception) { "Erreur : ${e.message ?: "Gemini indisponible"}" }
+            runOnUiThread { suggestion.setText(result) }
         }
     }
 
-    private fun toast(message: String) {
-        Toast.makeText(this, message, Toast.LENGTH_LONG).show()
-    }
-
-    override fun onDestroy() {
-        executor.shutdownNow()
-        super.onDestroy()
-    }
+    override fun onResume() { super.onResume(); if (::latest.isInitialized) refreshLatest() }
+    override fun onDestroy() { executor.shutdownNow(); super.onDestroy() }
 }
