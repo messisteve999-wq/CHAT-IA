@@ -6,7 +6,9 @@
 
     <application
         android:allowBackup="false"
-        android:label="CHAT-IA"
+        android:label="CHAT-IA V1"
+        android:icon="@drawable/ic_chatia"
+        android:roundIcon="@drawable/ic_chatia"
         android:theme="@android:style/Theme.Material.Light.NoActionBar"
         android:usesCleartextTraffic="false">
 

@@ -7,6 +7,7 @@ import android.content.Context
 import android.os.Bundle
 import android.view.Gravity
 import android.view.ViewGroup
+import android.widget.AdapterView
 import android.widget.ArrayAdapter
 import android.widget.Button
 import android.widget.EditText
@@ -90,6 +91,24 @@ class MainActivity : Activity() {
             android.R.layout.simple_spinner_dropdown_item,
             themes
         )
+        themeSpinner.setSelection(
+            preferences.getInt("theme_index", 0).coerceIn(themes.indices)
+        )
+        themeSpinner.onItemSelectedListener =
+            object : AdapterView.OnItemSelectedListener {
+                override fun onItemSelected(
+                    parent: AdapterView<*>?,
+                    view: android.view.View?,
+                    position: Int,
+                    id: Long
+                ) {
+                    preferences.edit()
+                        .putInt("theme_index", position)
+                        .apply()
+                }
+
+                override fun onNothingSelected(parent: AdapterView<*>?) {}
+            }
         content.addView(themeSpinner)
 
         content.addView(TextView(this).apply {

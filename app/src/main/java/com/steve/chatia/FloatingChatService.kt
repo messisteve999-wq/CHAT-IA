@@ -9,11 +9,30 @@ import android.provider.Settings
 import android.view.Gravity
 import android.view.WindowManager
 import android.widget.TextView
+import android.widget.Toast
 
 class FloatingChatService : Service() {
 
     private var windowManager: WindowManager? = null
     private var bubble: TextView? = null
+
+    private val themes = arrayOf(
+        "Faire connaissance",
+        "Drague amicale",
+        "Drague romantique",
+        "Vie quotidienne",
+        "Humour et taquinerie",
+        "Discussion profonde",
+        "Relancer une conversation"
+    )
+
+    private fun updateBubble() {
+        val index = getSharedPreferences("chatia", MODE_PRIVATE)
+            .getInt("theme_index", 0)
+            .coerceIn(themes.indices)
+
+        bubble?.text = "CHAT-IA\n${themes[index]}"
+    }
 
     override fun onCreate() {
         super.onCreate()
@@ -26,20 +45,42 @@ class FloatingChatService : Service() {
         windowManager = getSystemService(WINDOW_SERVICE) as WindowManager
 
         bubble = TextView(this).apply {
-            text = "CHAT-IA"
-            textSize = 14f
+            textSize = 12f
             setTextColor(0xFFFFFFFF.toInt())
             setBackgroundColor(0xFF673AB7.toInt())
-            setPadding(24, 16, 24, 16)
+            setPadding(20, 14, 20, 14)
             gravity = Gravity.CENTER
             elevation = 12f
 
             setOnClickListener {
-                val intent = Intent(this@FloatingChatService, MainActivity::class.java)
-                intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                val prefs = getSharedPreferences("chatia", MODE_PRIVATE)
+                val current = prefs.getInt("theme_index", 0)
+                    .coerceIn(themes.indices)
+                val next = (current + 1) % themes.size
+
+                prefs.edit().putInt("theme_index", next).apply()
+                updateBubble()
+
+                Toast.makeText(
+                    this@FloatingChatService,
+                    "Thème : ${themes[next]}",
+                    Toast.LENGTH_SHORT
+                ).show()
+            }
+
+            setOnLongClickListener {
+                val intent = Intent(
+                    this@FloatingChatService,
+                    MainActivity::class.java
+                ).apply {
+                    addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                }
                 startActivity(intent)
+                true
             }
         }
+
+        updateBubble()
 
         val params = WindowManager.LayoutParams(
             WindowManager.LayoutParams.WRAP_CONTENT,
@@ -62,7 +103,9 @@ class FloatingChatService : Service() {
 
     override fun onDestroy() {
         bubble?.let {
-            windowManager?.removeView(it)
+            if (it.isAttachedToWindow) {
+                windowManager?.removeView(it)
+            }
         }
         bubble = null
         windowManager = null
