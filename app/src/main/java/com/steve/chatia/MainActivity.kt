@@ -73,7 +73,7 @@ class MainActivity : Activity() {
 
         apiKey = EditText(this).apply {
             hint = "Clé API Gemini"
-            singleLine = true
+            setSingleLine(true)
             setText(preferences.getString("api_key", ""))
         }
         content.addView(apiKey)
@@ -161,7 +161,7 @@ class MainActivity : Activity() {
             textSize = 16f
             setTextColor(0xFF222222.toInt())
             setPadding(0, dp(18), 0, dp(18))
-            textIsSelectable = true
+            setTextIsSelectable(true)
         }
         content.addView(results)
 
